@@ -1,0 +1,8 @@
+docxtpl==0.18.0
+keyboa==3.1.0
+pandas==2.2.3
+pyTelegramBotAPI==4.23.0
+Requests==2.32.3
+schedule==1.2.2
+python-dotenv==1.0.1
+openpyxl==3.1.5
