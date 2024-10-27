@@ -1,0 +1,5 @@
+data/.env
+data/log.log
+data/req_arvchive.xlsx
+data/actual_table.xlsx
+data/tg_ids.txt

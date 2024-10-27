@@ -23,5 +23,9 @@ COPY . /mk_req_check
 # Переходим в рабочую директорию
 WORKDIR /mk_req_check
 
+EXPOSE 5000
+
+
 # Указываем точку входа (entrypoint) для запуска
-CMD ["python3", "main_script.py"]
+#CMD ["python3", "main_script.py"]
+

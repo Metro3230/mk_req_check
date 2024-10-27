@@ -14,5 +14,6 @@ this is debian bookworm for experiments for work tg bot )
  .env                   - сервисные токены, пароли, информация. (основной файл, который требуется перенести на новую мащину со старой)
  tg_ids.txt             - файл с id чатов к рассылке
  
-
-После сборки Dockerfile'ом, запускал коммандой docker run --name mk_req_check --restart unless-stopped -d mk_req_check:v07
+Собирирал docker build -t mk_req_check:test .
+После сборки Dockerfile'ом, запускал коммандой docker run --name mk_req_check_test --restart unless-stopped -d mk_req_check:test
+                                                docker run -d -p 5000:5000 --name mk_req_check_test --restart unless-stopped -d mk_req_check:test
