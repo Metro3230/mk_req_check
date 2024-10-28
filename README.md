@@ -1,10 +1,14 @@
-# mk_req_check
-
 this is debian bookworm for experiments for work tg bot )
- 
 
- в общем при сборке образа на новую машину озаботься о том, что бы обновить тут файл tg_ids.txt - там содержатся все актуальные id чатов. Если не сохранилось - забей, но все пользователи должны будут снова подписаться на бота. 
- Остальное не так важно, но в идеале обновить тут с рабочего контейнера всю папку data. 
+Как что то исправить или просто переехать? 
+    Скачиваешь репозиторий с гита - https://github.com/Metro3230/mk_req_check.git
+    Скачиваешь с бота файлы 'data' с актуальными данными (например /dw_data <service pass> прямо из бота)
+    Суешь сюда в папку
+    docker build .
+    После сборки запускать коммандой docker run --name mk_req_check --restart unless-stopped -d mk_req_check:vXX
+
+
+     
 
  Поясняю:
  actual_table.xlsx      - просто последняя скуаченная таблица. Она в докеригнор
@@ -14,6 +18,3 @@ this is debian bookworm for experiments for work tg bot )
  .env                   - сервисные токены, пароли, информация. (основной файл, который требуется перенести на новую мащину со старой)
  tg_ids.txt             - файл с id чатов к рассылке
  
-Собирирал docker build -t mk_req_check:test .
-После сборки Dockerfile'ом, запускал коммандой docker run --name mk_req_check_test --restart unless-stopped -d mk_req_check:test
-                                                docker run -d -p 5000:5000 --name mk_req_check_test --restart unless-stopped -d mk_req_check:test

@@ -10,21 +10,14 @@ RUN apt-get update && \
     ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone && rm -rf /var/lib/apt/lists/*
 
 
-# Устанавливаем нужные версии библиотек через requirements.txt
-# Копируем файл requirements.txt в контейнер
-COPY requirements.txt .
-
-# Устанавливаем зависимости
-RUN pip3 install --no-cache-dir --break-system-packages -r requirements.txt
-
 # Копируем весь проект в контейнер
 COPY . /mk_req_check
 
 # Переходим в рабочую директорию
 WORKDIR /mk_req_check
 
-EXPOSE 5000
-
+# Устанавливаем зависимости
+RUN pip3 install --no-cache-dir --break-system-packages -r requirements.txt
 
 # Указываем точку входа (entrypoint) для запуска
 #CMD ["python3", "main_script.py"]

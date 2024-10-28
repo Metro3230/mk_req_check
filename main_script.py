@@ -11,11 +11,13 @@ from pathlib import Path
 import os
 from docxtpl import DocxTemplate
 from dotenv import load_dotenv
-
+import re
+import shutil
  
 
 script_dir = Path(__file__).parent  # Определяем путь к текущему скрипту
 data_folder = script_dir / 'data'
+data_zip = script_dir / 'data.zip'
 log_file = script_dir / 'data/log.log'
 bearer_file = script_dir / 'data/Bearer.txt'
 ids_file = script_dir / 'data/tg_ids.txt'
@@ -45,15 +47,39 @@ headers = {
 
 def scheduled_messages():       # >-скрипт проверки новых заявок каждые х минут-<
     current_time = datetime.now().time()
-    if current_time >= datetime.strptime("08:00", "%H:%M").time() and current_time <= datetime.strptime("22:00", "%H:%M").time():
+    if current_time >= datetime.strptime("07:00", "%H:%M").time() and current_time <= datetime.strptime("22:00", "%H:%M").time():
         dw_actual_table()
         new_reqs_df = search_new_req()
         for req in new_reqs_df['Номер']:    # --цикл, пробегающийся по всем значениям столбца "номер" --
-            json_data, req_ID = gat_req_data(req)
-            msg = parse(json_data)
-            if msg != None:
-                new_req(msg, req_ID)
+            try:
+                json_data, req_ID = gat_req_data(req)
+                msg = parse(json_data)
+                if msg != None:
+                    new_req(msg, req_ID)
+            except:
+                bot.send_message(usr_id, 'есть какя-то новая заявка, но не удалось загрузить инфу..')
         update_archive()
+        check_SLA()
+
+
+def check_SLA():       # >-скрипт проверки истечения времени-<
+    df = pd.read_excel(actual_table)    # Загрузка таблицы
+    current_time = datetime.now()    # Получение текущего времени
+    for index, row in df.iterrows():    # Перебор строк с проверкой условий
+        deadline = pd.to_datetime(row['Предельный срок'], format='%Y-%m-%d %H:%M:%S')
+        status = row['Статус']
+        req_type = row['Тип заявки']
+        req_num = row['Номер']
+        if (current_time <= deadline < current_time + timedelta(hours=1)) and status != "on_hold" and req_type != "expertise":        # Проверка условий: срок истекает менее чем через час и статус подходящий            
+            with open(ids_file, 'r') as f:    # Читаем содержимое файла
+                lines = f.readlines()
+                for line in lines:
+                    try:    
+                        if line != '':
+                            bot.send_message(line, f"Внимание, {deadline} сгорит заявка {req_num} !")                  # Отправка сообщения о просроке всем
+                    except:
+                        logging.error(f"Ошибка отправки сообщения в чат - {line.strip()}, удаляем пользовтеля.")
+                        rm_id(line.strip())
 
 
 def new_req(msg, req_ID):    #отправка сообщения (msg), прикрипление ссылки с (req_ID) и документа по ссылке (attachment)
@@ -198,17 +224,21 @@ def get_AVR(req, chat_id):         # заполнение шаблона (при
         output_filename = script_dir / f'data/{req}.docx'   # Сохраняем новый документ
         template_doc.save(output_filename)    # сохранение документа
         with open(output_filename, 'rb') as doc:
-            bot.send_document(chat_id, doc, caption=f'АВР для {name}')   #грузим
+            name_fmd2 = escape_markdown_v2(name)
+            bot.send_document(chat_id, doc, caption=f'АВР для {name_fmd2}\nСсылка для инженера \(копируется нажатием\):\n`{req}, {name_fmd2}, https://sd\.servionica\.ru/record/itsm_request/{req_ID}`', parse_mode='MarkdownV2')   #грузим1
         bot.delete_message(chat_id, waiting_msg.message_id)
         os.remove(output_filename)
     else:
         bot.delete_message(chat_id, waiting_msg.message_id)
         bot.send_message(chat_id, "Ошибка: проект заявки не АБ")
 
+def escape_markdown_v2(text):   #подготовка текста для защиты от испорченного Markdown (добавляем \)
+    special_chars = r"_*[]()~`>#+-=|{}.!"
+    return re.sub(r"([{}])".format(re.escape(special_chars)), r"\\\1", text)
+
 def update_archive(): #функция обновления архива заявок
     actual_table_df = pd.DataFrame(pd.read_excel(actual_table).iloc[0:, 0])  # дастаём DF актуальной табличики
     actual_table_df.to_excel(arch_xl_table, index=False)  # пересохраняем архив заявок 
-
 
 #--------------------добавление и удаление подписки на рассылку--------------
 def add_id(id):
@@ -243,6 +273,7 @@ def save_last_update_id(update_id):
 
 
 #------------------сервисные команды обновления сервисных файлов и клава-----------------------------
+
 def handle_new_mk_bearer(message, chat_id, msg_id): #---обновление токена мультикарты---
     try:
         old_bearer = os.getenv('MK_BEARER')       # пишем в лог старый файл на всякий
@@ -266,6 +297,9 @@ def handle_new_mk_bearer(message, chat_id, msg_id): #---обновление т�
             }
             bot.send_message(chat_id, "Токен успешно обновлён!")
             logging.info('новый bearer установлен: ' + new_token)
+        elif input_password == os.getenv('FOLLOW_PASS'):  #если это пароль на подписку
+            bot.send_message(chat_id, "Это пароль на подписку. Так не прокатит.")
+            logging.info('Токен не обновлён пользователем ' + str(chat_id) + '(ввёл пароль на подписку)')
         else:
             bot.send_message(chat_id, "Неверный пароль.")
 
@@ -292,11 +326,15 @@ def handle_new_service_pass(message, chat_id, msg_id): #---обновление 
             update_env_variable('SERVICE_PASS', new_service_pass)
             bot.send_message(chat_id, "Сервисный пароль успешно обновлён!")
             logging.info('новый сервсиный пароль установлен: ' + new_service_pass)
+        elif input_password == os.getenv('FOLLOW_PASS'):  #если это пароль на подписку
+            bot.send_message(chat_id, "Это пароль на подписку. Так не прокатит.")
+            logging.info('Сервисный пароль не обновлён пользователем ' + str(chat_id) + '(ввёл пароль на подписку)')
         else:
             bot.send_message(chat_id, "Неверный пароль.")
 
     except Exception as e:
         bot.send_message(chat_id, f"Произошла ошибка: {e}")
+
 
 def handle_new_follow_pass(message, chat_id, msg_id): #---обновление пароля на подписку---
     try:
@@ -317,8 +355,62 @@ def handle_new_follow_pass(message, chat_id, msg_id): #---обновление �
             update_env_variable('FOLLOW_PASS', new_follow_pass)
             bot.send_message(chat_id, "Пароль на подписку успешно обновлён!")
             logging.info('новый пароль на подписку установлен: ' + new_follow_pass)
+        elif input_password == os.getenv('FOLLOW_PASS'):  #если это пароль на подписку
+            bot.send_message(chat_id, "Это пароль на подписку. Так не прокатит.")
+            logging.info('Пароль на подписку не обновлён пользователем ' + str(chat_id) + '(ввёл пароль на подписку)')
         else:
             bot.send_message(chat_id, "Неверный сервисный пароль.")
+
+    except Exception as e:
+        bot.send_message(chat_id, f"Произошла ошибка: {e}")
+
+
+def handle_dw_logs(message, chat_id, msg_id): #---скачивание логов---
+    try:
+        command_parts = message.split(maxsplit=2)         # Разделяем текст команды на части
+
+        if len(command_parts) < 2:         # Проверяем, что есть и пароль
+            bot.send_message(chat_id, "Ошибка: формат команды /log <pass>")
+            return
+        
+        input_password = command_parts[1]
+
+        if input_password == os.getenv('SERVICE_PASS'):        # Проверяем правильность пароля
+            bot.delete_message(chat_id, msg_id) #удаляем пароль из чата
+            with open(log_file, 'rb') as file:
+                bot.send_document(chat_id, file)
+            logging.info('log скачен пользователем ' + str(chat_id))
+        elif input_password == os.getenv('FOLLOW_PASS'):  #если это пароль на подписку
+            bot.send_message(chat_id, "Это пароль на подписку. Так не прокатит.")
+            logging.info('log не скачен пользователем ' + str(chat_id) + ' (ввёл пароль на подписку)')
+        else:
+            bot.send_message(chat_id, "Неверный пароль.")
+
+    except Exception as e:
+        bot.send_message(chat_id, f"Произошла ошибка: {e}")
+
+def handle_dw_data(message, chat_id, msg_id): #---скачивание данных---
+    try:
+        command_parts = message.split(maxsplit=2)         # Разделяем текст команды на части
+
+        if len(command_parts) < 2:         # Проверяем, что есть и пароль
+            bot.send_message(chat_id, "Ошибка: формат команды /dw_data <pass>")
+            return
+        
+        input_password = command_parts[1]
+
+        if input_password == os.getenv('SERVICE_PASS'):        # Проверяем правильность пароля
+            bot.delete_message(chat_id, msg_id) #удаляем пароль из чата
+            shutil.make_archive(str(data_zip).replace('.zip', ''), 'zip', data_folder)
+            with open(data_zip, 'rb') as file:
+                bot.send_document(chat_id, file)
+            os.remove(data_zip)
+            logging.info('data скачен пользователем ' + str(chat_id))
+        elif input_password == os.getenv('FOLLOW_PASS'):  #если это пароль на подписку
+            bot.send_message(chat_id, "Это пароль на подписку. Так не прокатит.")
+            logging.info('data не скачен пользователем ' + str(chat_id) + '(ввёл пароль на подписку)')
+        else:
+            bot.send_message(chat_id, "Неверный пароль.")
 
     except Exception as e:
         bot.send_message(chat_id, f"Произошла ошибка: {e}")
@@ -344,6 +436,9 @@ def handle_new_url(message, chat_id, msg_id): #---обновление ЮРЛ---
             url = new_url
             bot.send_message(chat_id, "URL успешно обновлён!")
             logging.info('новый URL установлен: ' + new_url)
+        elif input_password == os.getenv('FOLLOW_PASS'):  #если это пароль на подписку
+            bot.send_message(chat_id, "Это пароль на подписку. Так не прокатит.")
+            logging.info('URL не обновлён пользователем ' + str(chat_id) + '(ввёл пароль на подписку)')
         else:
             bot.send_message(chat_id, "Неверный пароль.")
 
@@ -393,7 +488,10 @@ def send_keyboard(usr_id, send_text):
 
 def check_new_messages():
     global last_update_id
-    updates = bot.get_updates(offset=last_update_id, timeout=1)
+    try:
+        updates = bot.get_updates(offset=last_update_id, timeout=4)
+    except:
+        logging.error(f"Ошибка запроса новых сообщений.")
     for update in updates:
         last_update_id = update.update_id + 1  # Обновляем id последнего обработанного сообщения
         save_last_update_id(last_update_id)  # Сохраняем id в файл
@@ -447,9 +545,11 @@ def check_new_messages():
                     scheduled_messages()
                     bot.send_message(usr_id, "Обновлено")
 
-                elif message_text == "/log":
-                    with open(log_file, 'rb') as file:
-                        bot.send_document(usr_id, file)
+                elif "/log" in message_text:
+                    handle_dw_logs(message_text, usr_id, message_id)
+
+                elif "/dw_data" in message_text:
+                    handle_dw_data(message_text, usr_id, message_id)
 
                 elif message_text == "/service":
                     bot.send_message(usr_id, '/new_bearer - заменить Bearer токен S1\n' +
@@ -457,6 +557,8 @@ def check_new_messages():
                                             '/new_service_pass - замена сервисного пароля\n'
                                             '/new_follow_pass - замена пароля на подписку\n'
                                             '/dw_template - скачать текущий шаблон АВР\n'
+                                            '/log - скачать логи\n'
+                                            '/dw_data - скачать все данные текущего состояния бота\n'
                                             'Для обновления шаблона на сервере - прикрепи к сообщению с сервисным паролем документ "template.docx" (скачай, измени, загрузи)')
 
                 elif "/new_bearer" in message_text:           # ==сервисная команда: замены Bearer токена
@@ -485,7 +587,7 @@ def check_new_messages():
 
 
 def main_logic():
-    schedule.every(10).minutes.do(scheduled_messages) # Планируем задачу на каждые 10 минут
+    schedule.every(10).minutes.do(scheduled_messages) # Планируем задачу на каждые x минут
     logging.info('скрипт запущен')
     load_last_update_id()  # Загружаем последний update_id из файла при запуске
     scheduled_messages() # выполнение при запуске
