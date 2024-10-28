@@ -4,7 +4,7 @@ this is debian bookworm for experiments for work tg bot )
     1. Скачиваешь репозиторий с гита - https://github.com/Metro3230/mk_req_check.git
     2. Скачиваешь с бота файлы 'data' с актуальными данными (например /dw_data <service pass> прямо из бота)
     3. Суешь сюда в папку
-    4. docker build .
+    4. docker build . -t mk_req_check:vXX
     5. После сборки запускать коммандой docker run --name mk_req_check --restart unless-stopped -d mk_req_check:vXX
 
 
