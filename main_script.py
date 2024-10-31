@@ -571,6 +571,7 @@ def check_new_messages():
                                             '/dw_template - скачать текущий шаблон АВР\n'
                                             '/log - скачать логи\n'
                                             '/dw_data - скачать все данные текущего состояния бота\n'
+                                            '/check - принудительная проверка новых заявок\n'
                                             'Для обновления шаблона на сервере - прикрепи к сообщению с сервисным паролем документ "template.docx" (скачай, измени, загрузи)')
 
                 elif "/new_bearer" in message_text:           # ==сервисная команда: замены Bearer токена
@@ -588,6 +589,11 @@ def check_new_messages():
 
                 elif "/new_follow_pass" in message_text:           # ==сервисная команда: замены сервисного пароля
                     handle_new_follow_pass(message_text, usr_id, message_id)
+                    
+                elif message_text == "/check":
+                    bot.send_message(usr_id, "Обновляю...")
+                    scheduled_messages()
+                    bot.send_message(usr_id, "...обновленО")
 
                 elif message_text == os.getenv('FOLLOW_PASS'):       # команда 'подписаться'
                     bot.delete_message(usr_id, message_id) #удаляем пароль из чата
