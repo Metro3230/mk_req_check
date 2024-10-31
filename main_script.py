@@ -120,117 +120,129 @@ def dw_actual_table():   #функция скачивания актуально
 
 
 def search_new_req():   #функция поиска новых заявок
-    actual_table_df = pd.DataFrame(pd.read_excel(actual_table).iloc[0:, 0])           #выкачиваем датафрейм из файлов (первый столбец весь)
-    arch_xl_table_df = pd.DataFrame(pd.read_excel(arch_xl_table).iloc[0:, 0]) 
-    new_reqs_df = actual_table_df[~actual_table_df['Номер'].isin(arch_xl_table_df['Номер'])]   # Сравнение по первому столбцу и удаление строк из df2, которые есть в df1  (врозвращает новые заявки !!!)
-    return new_reqs_df
+    try:
+        actual_table_df = pd.DataFrame(pd.read_excel(actual_table).iloc[0:, 0])           #выкачиваем датафрейм из файлов (первый столбец весь)
+        arch_xl_table_df = pd.DataFrame(pd.read_excel(arch_xl_table).iloc[0:, 0]) 
+        new_reqs_df = actual_table_df[~actual_table_df['Номер'].isin(arch_xl_table_df['Номер'])]   # Сравнение по первому столбцу и удаление строк из df2, которые есть в df1  (врозвращает новые заявки !!!)
+        return new_reqs_df
+    except Exception as e:
+        logging.error(f"функция поиска новых заявок выдала ошибку: {e}")
 
 def gat_req_data(req):   #функция вытаскивания данных по номеру заявки (отдаёт json со всеми нужными данными и req_ID)
-    response = requests.get('https://sd.servionica.ru/v1/search?query=' + req, headers=headers)    # Делаем запрос на поисковую страничку (узнать ссылку на заявку (её ИД в системе))
-    if response.status_code == 200:    # Проверяем статус ответа
-        data = response.content.decode('utf-8') # Декодируем данные
-        json_data = json.loads(data) # И вуаля! У нас есть JSON.
-        req_ID = json_data['data']['records'][0]['sys_id']   # парсим ID для ссылки - первый результат поиска
-        response = requests.get('https://sd.servionica.ru/v1/record/itsm_request/' + req_ID, headers=headers)   # Делаем запрос на страничку заявки
+    try:
+        response = requests.get('https://sd.servionica.ru/v1/search?query=' + req, headers=headers)    # Делаем запрос на поисковую страничку (узнать ссылку на заявку (её ИД в системе))
         if response.status_code == 200:    # Проверяем статус ответа
             data = response.content.decode('utf-8') # Декодируем данные
-            json_data = json.loads(data) # И вуаля! У нас есть JSON ещё.
-            return (json_data, req_ID)
+            json_data = json.loads(data) # И вуаля! У нас есть JSON.
+            req_ID = json_data['data']['records'][0]['sys_id']   # парсим ID для ссылки - первый результат поиска
+            response = requests.get('https://sd.servionica.ru/v1/record/itsm_request/' + req_ID, headers=headers)   # Делаем запрос на страничку заявки
+            if response.status_code == 200:    # Проверяем статус ответа
+                data = response.content.decode('utf-8') # Декодируем данные
+                json_data = json.loads(data) # И вуаля! У нас есть JSON ещё.
+                return (json_data, req_ID)
+            else:
+                srv_error(response)
         else:
             srv_error(response)
-    else:
-        srv_error(response)
+    except Exception as e:
+        logging.error(f"функция вытаскивания данных по номеру заявки выдала ошибку: {e}")
 
 def parse(json_data):   #функция парсинга и составления сообщения
-    proj = json_data['data']['sections'][1]['elements'][34]['value']['display_value'] # парсим проект 
-    req = json_data['data']['sections'][1]['elements'][1]['value'] # и номер заявки
-    if proj == 'АО \"АЛЬФА-БАНК\"':                  # ++++++++++-----АБ-------++++++++++++++
-        info = json_data['data']['sections'][1]['elements'][41]['value']   
-        adress = json_data['data']['sections'][6]['elements'][4]['value']
-        deadline = json_data['data']['sections'][1]['elements'][37]['value']
-        deadline = plus_three_hour(deadline)
-        info = 'нет информации' if info == None else info                   # проверки на ноль
-        adress = 'нет информации' if adress == None else adress
-        new_req_message = ('Новая заявка: ' + req +  ' по ' + proj + '\n'
-                + adress + '\n'
-                + 'До: ' + deadline + '\n'
-                + info)
-        return new_req_message
-    elif proj == 'Банк ВТБ': 
-        servis_type = json_data['data']['sections'][1]['elements'][22]['value']['display_value']   #  склад или сервисная
-        if servis_type == 'Сервисные заявки':         # ++++++++++-----ВТБ СЕРВИС-------++++++++++++++
-            req_type = json_data['data']['sections'][5]['elements'][9]['value']  
-            adress = json_data['data']['sections'][5]['elements'][35]['value']
+    try:
+        proj = json_data['data']['sections'][1]['elements'][34]['value']['display_value'] # парсим проект 
+        req = json_data['data']['sections'][1]['elements'][1]['value'] # и номер заявки
+        if proj == 'АО \"АЛЬФА-БАНК\"':                  # ++++++++++-----АБ-------++++++++++++++
+            info = json_data['data']['sections'][1]['elements'][41]['value']   
+            adress = json_data['data']['sections'][6]['elements'][4]['value']
             deadline = json_data['data']['sections'][1]['elements'][37]['value']
             deadline = plus_three_hour(deadline)
-            req_suts = json_data['data']['sections'][1]['elements'][2]['value']
-            req_type = 'нет информации' if req_type == None else req_type               # проверки на ноль
+            info = 'нет информации' if info == None else info                   # проверки на ноль
             adress = 'нет информации' if adress == None else adress
-            req_suts = 'нет информации' if req_suts == None else req_suts
-            if req_type != 'expertise':                                      # кроме экспертиз
-                new_req_message = ('Новая заявка: ' + req + ' (' + req_suts + ') по ' + proj + '\n'
-                        + adress + '\n'
-                        + 'До: ' + deadline + '\n'
-                        + 'Тип: ' + req_type)
-                return new_req_message
-        elif servis_type == 'Складские заявки':         # ++++++++++-----ВТБ СКЛАД-------++++++++++++++
-            deadline = json_data['data']['sections'][1]['elements'][37]['value']
-            deadline = plus_three_hour(deadline)
-            req_suts = json_data['data']['sections'][1]['elements'][2]['value']
-            req_suts = 'нет информации' if req_suts == None else req_suts
-            new_req_message = ('Новая складская заявка: ' + req + ' по ' + proj + '\n'
-                    'Предельный срок: ' + deadline + '\n')
+            new_req_message = ('Новая заявка: ' + req +  ' по ' + proj + '\n'
+                    + adress + '\n'
+                    + 'До: ' + deadline + '\n'
+                    + info)
             return new_req_message
-        else:                                           # ++++++++++-----ВТБ ХЗ-------++++++++++++++
+        elif proj == 'Банк ВТБ': 
+            servis_type = json_data['data']['sections'][1]['elements'][22]['value']['display_value']   #  склад или сервисная
+            if servis_type == 'Сервисные заявки':         # ++++++++++-----ВТБ СЕРВИС-------++++++++++++++
+                req_type = json_data['data']['sections'][5]['elements'][9]['value']  
+                adress = json_data['data']['sections'][5]['elements'][35]['value']
+                deadline = json_data['data']['sections'][1]['elements'][37]['value']
+                deadline = plus_three_hour(deadline)
+                req_suts = json_data['data']['sections'][1]['elements'][2]['value']
+                req_type = 'нет информации' if req_type == None else req_type               # проверки на ноль
+                adress = 'нет информации' if adress == None else adress
+                req_suts = 'нет информации' if req_suts == None else req_suts
+                if req_type != 'expertise':                                      # кроме экспертиз
+                    new_req_message = ('Новая заявка: ' + req + ' (' + req_suts + ') по ' + proj + '\n'
+                            + adress + '\n'
+                            + 'До: ' + deadline + '\n'
+                            + 'Тип: ' + req_type)
+                    return new_req_message
+            elif servis_type == 'Складские заявки':         # ++++++++++-----ВТБ СКЛАД-------++++++++++++++
+                deadline = json_data['data']['sections'][1]['elements'][37]['value']
+                deadline = plus_three_hour(deadline)
+                req_suts = json_data['data']['sections'][1]['elements'][2]['value']
+                req_suts = 'нет информации' if req_suts == None else req_suts
+                new_req_message = ('Новая складская заявка: ' + req + ' по ' + proj + '\n'
+                        'Предельный срок: ' + deadline + '\n')
+                return new_req_message
+            else:                                           # ++++++++++-----ВТБ ХЗ-------++++++++++++++
+                info = json_data['data']['sections'][1]['elements'][41]['value']   
+                info = 'нет информации' if info == None else info                   # проверки на ноль
+                new_req_message = ('Новая заявка: ' + req + '\n'
+                        'по ' + proj + '\n'
+                        'Информация: ' + info)
+                return new_req_message
+        else:                                                # ++++++++++-----ВООБЩЕ ХЗ-------++++++++++++++
             info = json_data['data']['sections'][1]['elements'][41]['value']   
             info = 'нет информации' if info == None else info                   # проверки на ноль
             new_req_message = ('Новая заявка: ' + req + '\n'
-                    'по ' + proj + '\n'
+                    'по проекту ' + proj + '\n'
                     'Информация: ' + info)
             return new_req_message
-    else:                                                # ++++++++++-----ВООБЩЕ ХЗ-------++++++++++++++
-        info = json_data['data']['sections'][1]['elements'][41]['value']   
-        info = 'нет информации' if info == None else info                   # проверки на ноль
-        new_req_message = ('Новая заявка: ' + req + '\n'
-                'по проекту ' + proj + '\n'
-                'Информация: ' + info)
-        return new_req_message
+    except Exception as e:
+        logging.error(f"функция парсинга и составления сообщения выдала ошибку: {e}")
     
 def get_AVR(req, chat_id):         # заполнение шаблона (принимает json данные - отдаёт ссылку на созданый заполненый .docx)
-    logging.info('запрос АВР для ' + req)
-    waiting_msg = bot.send_message(chat_id, 'Готовлю АВР...')
     try:
-        json_data, req_ID = gat_req_data(req)   #пытаемся получить json данные по заявке
-    except:
-        bot.delete_message(chat_id, waiting_msg.message_id)
-        bot.send_message(chat_id, "Не удалось, что то не так, может лишний символ?")
-        logging.error('запрос АВР для "' + req + '" не удался')
-        return
-    proj = json_data['data']['sections'][1]['elements'][34]['value']['display_value'] # парсим проект 
-    if proj == 'АО \"АЛЬФА-БАНК\"':                  # поверка на АБ
-        adress = json_data['data']['sections'][6]['elements'][4]['value']
-        name = json_data['data']['sections'][6]['elements'][18]['value']
-        full_name = json_data['data']['sections'][6]['elements'][32]['value']
-        tid = json_data['data']['sections'][6]['elements'][2]['value']
-        template_doc = DocxTemplate(template)    # Загружаем шаблон документа
-        context = {    # Данные для замены в шаблоне
-            'req': req,
-            'name': name,
-            'full_name': full_name,
-            'adress': adress,
-            'tid': tid,
-        }
-        template_doc.render(context)    # Заполняем шаблон данными 
-        output_filename = script_dir / f'data/{req}.docx'   # Сохраняем новый документ
-        template_doc.save(output_filename)    # сохранение документа
-        with open(output_filename, 'rb') as doc:
-            name_fmd2 = escape_markdown_v2(name)
-            bot.send_document(chat_id, doc, caption=f'АВР для {name_fmd2}\nСсылка для инженера \(копируется нажатием\):\n`{req}, {name_fmd2}, https://sd\.servionica\.ru/record/itsm_request/{req_ID}`', parse_mode='MarkdownV2')   #грузим1
-        bot.delete_message(chat_id, waiting_msg.message_id)
-        os.remove(output_filename)
-    else:
-        bot.delete_message(chat_id, waiting_msg.message_id)
-        bot.send_message(chat_id, "Ошибка: проект заявки не АБ")
+        logging.info('запрос АВР для ' + req)
+        waiting_msg = bot.send_message(chat_id, 'Готовлю АВР...')
+        try:
+            json_data, req_ID = gat_req_data(req)   #пытаемся получить json данные по заявке
+        except:
+            bot.delete_message(chat_id, waiting_msg.message_id)
+            bot.send_message(chat_id, "Не удалось, что то не так, может лишний символ?")
+            logging.error('запрос АВР для "' + req + '" не удался')
+            return
+        proj = json_data['data']['sections'][1]['elements'][34]['value']['display_value'] # парсим проект 
+        if proj == 'АО \"АЛЬФА-БАНК\"':                  # поверка на АБ
+            adress = json_data['data']['sections'][6]['elements'][4]['value']
+            name = json_data['data']['sections'][6]['elements'][18]['value']
+            full_name = json_data['data']['sections'][6]['elements'][32]['value']
+            tid = json_data['data']['sections'][6]['elements'][2]['value']
+            template_doc = DocxTemplate(template)    # Загружаем шаблон документа
+            context = {    # Данные для замены в шаблоне
+                'req': req,
+                'name': name,
+                'full_name': full_name,
+                'adress': adress,
+                'tid': tid,
+            }
+            template_doc.render(context)    # Заполняем шаблон данными 
+            output_filename = script_dir / f'data/{req}.docx'   # Сохраняем новый документ
+            template_doc.save(output_filename)    # сохранение документа
+            with open(output_filename, 'rb') as doc:
+                name_fmd2 = escape_markdown_v2(name)
+                bot.send_document(chat_id, doc, caption=f'АВР для {name_fmd2}\nСсылка для инженера \(копируется нажатием\):\n`{req}, {name_fmd2}, https://sd\.servionica\.ru/record/itsm_request/{req_ID}`', parse_mode='MarkdownV2')   #грузим1
+            bot.delete_message(chat_id, waiting_msg.message_id)
+            os.remove(output_filename)
+        else:
+            bot.delete_message(chat_id, waiting_msg.message_id)
+            bot.send_message(chat_id, "Ошибка: проект заявки не АБ")
+    except Exception as e:
+        logging.error(f"функция парсинга и составления сообщения выдала ошибку: {e}")
 
 def escape_markdown_v2(text):   #подготовка текста для защиты от испорченного Markdown (добавляем \)
     special_chars = r"_*[]()~`>#+-=|{}.!"
@@ -272,7 +284,7 @@ def save_last_update_id(update_id):
     update_env_variable('LAST_UPDATE_ID', update_id)
 
 
-#------------------сервисные команды обновления сервисных файлов и клава-----------------------------
+#-----------------\/-сервисные команды обновления сервисных файлов и клава-\/----------------------------
 
 def handle_new_mk_bearer(message, chat_id, msg_id): #---обновление токена мультикарты---
     try:
@@ -336,7 +348,7 @@ def handle_new_service_pass(message, chat_id, msg_id): #---обновление 
         bot.send_message(chat_id, f"Произошла ошибка: {e}")
 
 
-def handle_new_follow_pass(message, chat_id, msg_id): #---обновление пароля на подписку---
+def handle_new_follow_pass(message, chat_id, msg_id): #---обновление пароля на подписку-------------+
     try:
         old_follow_pass = os.getenv('FOLLOW_PASS')       # пишем в лог старый файл на всякий
         logging.info('попытка смены пароля на подписку: "' + old_follow_pass + '" на новый...')
@@ -365,7 +377,7 @@ def handle_new_follow_pass(message, chat_id, msg_id): #---обновление �
         bot.send_message(chat_id, f"Произошла ошибка: {e}")
 
 
-def handle_dw_logs(message, chat_id, msg_id): #---скачивание логов---
+def handle_dw_logs(message, chat_id, msg_id): #---скачивание логов-----------------------------------+
     try:
         command_parts = message.split(maxsplit=2)         # Разделяем текст команды на части
 
@@ -389,7 +401,7 @@ def handle_dw_logs(message, chat_id, msg_id): #---скачивание лого�
     except Exception as e:
         bot.send_message(chat_id, f"Произошла ошибка: {e}")
 
-def handle_dw_data(message, chat_id, msg_id): #---скачивание данных---
+def handle_dw_data(message, chat_id, msg_id): #---скачивание данных------------------------------------+
     try:
         command_parts = message.split(maxsplit=2)         # Разделяем текст команды на части
 
@@ -416,7 +428,7 @@ def handle_dw_data(message, chat_id, msg_id): #---скачивание данн�
         bot.send_message(chat_id, f"Произошла ошибка: {e}")
 
 
-def handle_new_url(message, chat_id, msg_id): #---обновление ЮРЛ---
+def handle_new_url(message, chat_id, msg_id): #---обновление ЮРЛ--------------------------------------+
     global url
     try:
         logging.info('попытка смены url: "' + url + '" на новый...')
@@ -446,7 +458,7 @@ def handle_new_url(message, chat_id, msg_id): #---обновление ЮРЛ---
         bot.send_message(chat_id, f"Произошла ошибка: {e}")
 
 
-def update_env_variable(key, value): #---функция обновления параметра в файле secrets.env---
+def update_env_variable(key, value): #---функция обновления параметра в файле secrets.env------------+
 
     if os.path.exists(env_file):    # Считаем текущие данные из .env файла
         with open(env_file, 'r') as file:
@@ -482,7 +494,7 @@ def send_keyboard(usr_id, send_text):
         keyboard.row(button_3)
         bot.send_message(usr_id, send_text, reply_markup=keyboard)       # Отправляем сообщение с клавиатурой
 
-#------------------сервисные команды обновления сервисных файлов и клава-----------------------------
+#-----------------/\-сервисные команды обновления сервисных файлов и клава-/\---------------------------
 
 
 
@@ -590,7 +602,7 @@ def main_logic():
     schedule.every(10).minutes.do(scheduled_messages) # Планируем задачу на каждые x минут
     logging.info('скрипт запущен')
     load_last_update_id()  # Загружаем последний update_id из файла при запуске
-    scheduled_messages() # выполнение при запуске
+    # scheduled_messages() # выполнение при запуске
     while True:
         schedule.run_pending()
         check_new_messages()  # Проверяем новые сообщения
