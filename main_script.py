@@ -45,9 +45,9 @@ headers = {
 }
 
 
-def scheduled_messages():       # >-скрипт проверки новых заявок каждые х минут-<
+def scheduled_messages(param=None):       # >-скрипт проверки новых заявок каждые х минут-<
     current_time = datetime.now().time()
-    if current_time >= datetime.strptime("07:00", "%H:%M").time() and current_time <= datetime.strptime("22:00", "%H:%M").time():
+    if (current_time >= datetime.strptime("07:00", "%H:%M").time() and current_time <= datetime.strptime("22:00", "%H:%M").time()) or param == 'exc':   #если день или передан параметр exc
         dw_actual_table()
         new_reqs_df = search_new_req()
         for req in new_reqs_df['Номер']:    # --цикл, пробегающийся по всем значениям столбца "номер" --
@@ -57,7 +57,7 @@ def scheduled_messages():       # >-скрипт проверки новых з�
                 if msg != None:
                     new_req(msg, req_ID)
             except:
-                bot.send_message(usr_id, 'есть какя-то новая заявка, но не удалось загрузить инфу..')
+                new_req('есть какя-то новая заявка, но не удалось загрузить инфу..', 000)
         update_archive()
         check_SLA()
 
@@ -83,18 +83,21 @@ def check_SLA():       # >-скрипт проверки истечения вр
 
 
 def new_req(msg, req_ID):    #отправка сообщения (msg), прикрипление ссылки с (req_ID) и документа по ссылке (attachment)
-    keyboard = types.InlineKeyboardMarkup()
-    url_button = types.InlineKeyboardButton(text='открыть', url='https://sd.servionica.ru/record/itsm_request/' + req_ID)
-    keyboard.add(url_button)
-    with open(ids_file, 'r') as f:    # Читаем содержимое файла
-        lines = f.readlines()
-        for line in lines:
-            try:    
-                if line != '':
-                    bot.send_message(line, msg, reply_markup=keyboard)                  # Отправка сообщение с ссылкой
-            except:
-                logging.error(f"Ошибка отправки сообщения в чат - {line.strip()}, удаляем пользовтеля.")
-                rm_id(line.strip())
+    try:       
+        keyboard = types.InlineKeyboardMarkup()
+        url_button = types.InlineKeyboardButton(text='открыть', url='https://sd.servionica.ru/record/itsm_request/' + req_ID)
+        keyboard.add(url_button)
+        with open(ids_file, 'r') as f:    # Читаем содержимое файла
+            lines = f.readlines()
+            for line in lines:
+                try:    
+                    if line != '':
+                        bot.send_message(line, msg, reply_markup=keyboard)                  # Отправка сообщение с ссылкой
+                except:
+                    logging.error(f"Ошибка отправки сообщения в чат - {line.strip()}, удаляем пользовтеля.")
+                    rm_id(line.strip())
+    except Exception as e:
+        logging.error(f"функция отправки сообщения выдала ошибку: {e}")
 
 def srv_error(response):   #оброаботка при ошибках сервера
     logging.error(f"Ошибка сервера: {response.status_code} - {response.text}")
@@ -554,8 +557,8 @@ def check_new_messages():
                         logging.error(id + ' не смог отписаться. Что то пошло не так.')
                         
                 elif message_text == "Обновить принудительно":
-                    scheduled_messages()
-                    bot.send_message(usr_id, "Обновлено")
+                    scheduled_messages('exc')
+                    bot.send_message(usr_id, "Принудительно обновлено...")
 
                 elif "/log" in message_text:
                     handle_dw_logs(message_text, usr_id, message_id)
@@ -571,7 +574,6 @@ def check_new_messages():
                                             '/dw_template - скачать текущий шаблон АВР\n'
                                             '/log - скачать логи\n'
                                             '/dw_data - скачать все данные текущего состояния бота\n'
-                                            '/check - принудительная проверка новых заявок\n'
                                             'Для обновления шаблона на сервере - прикрепи к сообщению с сервисным паролем документ "template.docx" (скачай, измени, загрузи)')
 
                 elif "/new_bearer" in message_text:           # ==сервисная команда: замены Bearer токена
@@ -590,11 +592,6 @@ def check_new_messages():
                 elif "/new_follow_pass" in message_text:           # ==сервисная команда: замены сервисного пароля
                     handle_new_follow_pass(message_text, usr_id, message_id)
                     
-                elif message_text == "/check":
-                    bot.send_message(usr_id, "Обновляю...")
-                    scheduled_messages()
-                    bot.send_message(usr_id, "...обновленО")
-
                 elif message_text == os.getenv('FOLLOW_PASS'):       # команда 'подписаться'
                     bot.delete_message(usr_id, message_id) #удаляем пароль из чата
                     bot.delete_message(usr_id, message_id - 1) 
