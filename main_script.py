@@ -505,100 +505,100 @@ def check_new_messages():
     global last_update_id
     try:
         updates = bot.get_updates(offset=last_update_id, timeout=4)
+        for update in updates:
+            last_update_id = update.update_id + 1  # Обновляем id последнего обработанного сообщения
+            save_last_update_id(last_update_id)  # Сохраняем id в файл
+            if update.message:  # Проверяем, есть ли сообщение в обновлении
+                usr_id = update.message.from_user.id
+                message_text = update.message.text  # Получаем текст сообщения
+                message_id = update.message.message_id   
+
+                if update.message.document:                             # обновление  шаблона
+                    message_file_id = update.message.document.file_id
+                    message_file_name = update.message.document.file_name
+                    if os.path.exists(service_pass):       # Получаем сохраненный пароль из файла
+                        with open(service_pass, 'r') as f:
+                            s_pass = f.read().strip()
+                    if message_file_name == 'template.docx' and update.message.caption == s_pass: # если прикреплен новый шаблон и введён пароль
+                        bot.delete_message(usr_id, message_id)   #удаляем сообщение с
+                        downloaded_file = bot.download_file(bot.get_file(message_file_id).file_path)
+                        with open(template, 'wb') as new_file:            # Сохраняем файл на сервере, заменяя старый
+                            new_file.write(downloaded_file)
+                        bot.send_message(usr_id, "Шаблон успешно обновлён")
+                    else:
+                        bot.send_message(usr_id, "Что бы заменить шаблон на сервере нужно прикрепить файл с названием template.docx и в сообщении ввести сервисный пароль")
+
+
+                else:
+
+                    if message_text == "Привет" or message_text == "привет":
+                        bot.send_message(usr_id, 'from oldest SHTEBLETS')
+
+                    elif message_text.startswith('REQ'):        # полуение АВР для заявки
+                        get_AVR(message_text, usr_id)
+
+                    elif (message_text == "/start" or message_text == "/help"):
+                        send_text = ('Проверяет новые заявки каждые 10 минут.\n\n' +
+                                    'Подписаться или отписаться от рассылки - нажать на кнопки ниже:')
+                        send_keyboard(usr_id, send_text)
+
+                    elif message_text == "Подписаться":
+                        bot.send_message(usr_id, "Введи пароль:")
+
+                    elif message_text == "Отписаться":
+                        try:
+                            rm_id(usr_id)
+                            bot.send_message(id, "Ты отписался от новых заявок по саранску")
+                            logging.info(id + ' отписался самостоятельно')
+                        except:
+                            bot.send_message(id, "Странно, отписаться не получилось, скажи Сане")
+                            logging.error(id + ' не смог отписаться. Что то пошло не так.')
+                            
+                    elif message_text == "Обновить принудительно":
+                        scheduled_messages('exc')
+                        bot.send_message(usr_id, "Принудительно обновлено...")
+
+                    elif "/log" in message_text:
+                        handle_dw_logs(message_text, usr_id, message_id)
+
+                    elif "/dw_data" in message_text:
+                        handle_dw_data(message_text, usr_id, message_id)
+
+                    elif message_text == "/service":
+                        bot.send_message(usr_id, '/new_bearer - заменить Bearer токен S1\n' +
+                                                '/new_url - заменить ссылку скачивания .xlsx новых заявок (указывать без bearer)\n'
+                                                '/new_service_pass - замена сервисного пароля\n'
+                                                '/new_follow_pass - замена пароля на подписку\n'
+                                                '/dw_template - скачать текущий шаблон АВР\n'
+                                                '/log - скачать логи\n'
+                                                '/dw_data - скачать все данные текущего состояния бота\n'
+                                                'Для обновления шаблона на сервере - прикрепи к сообщению с сервисным паролем документ "template.docx" (скачай, измени, загрузи)')
+
+                    elif "/new_bearer" in message_text:           # ==сервисная команда: замены Bearer токена
+                        handle_new_mk_bearer(message_text, usr_id, message_id)
+
+                    elif "/new_url" in message_text:           # ==сервисная команда: замены URL
+                        handle_new_url(message_text, usr_id, message_id)
+
+                    elif "/dw_template" in message_text:           # ==сервисная команда: скачать текущий шаблон
+                        with open(template, 'rb') as file:
+                            bot.send_document(usr_id, file)
+
+                    elif "/new_service_pass" in message_text:           # ==сервисная команда: замены сервисного пароля
+                        handle_new_service_pass(message_text, usr_id, message_id)
+
+                    elif "/new_follow_pass" in message_text:           # ==сервисная команда: замены сервисного пароля
+                        handle_new_follow_pass(message_text, usr_id, message_id)
+                        
+                    elif message_text == os.getenv('FOLLOW_PASS'):       # команда 'подписаться'
+                        bot.delete_message(usr_id, message_id) #удаляем пароль из чата
+                        bot.delete_message(usr_id, message_id - 1) 
+                        add_id(usr_id)
+                    else:
+                        send_text = ('🤔...')
+                        send_keyboard(usr_id, send_text)                    
     except:
         logging.error(f"Ошибка запроса новых сообщений.")
-    for update in updates:
-        last_update_id = update.update_id + 1  # Обновляем id последнего обработанного сообщения
-        save_last_update_id(last_update_id)  # Сохраняем id в файл
-        if update.message:  # Проверяем, есть ли сообщение в обновлении
-            usr_id = update.message.from_user.id
-            message_text = update.message.text  # Получаем текст сообщения
-            message_id = update.message.message_id   
-
-            if update.message.document:                             # обновление  шаблона
-                message_file_id = update.message.document.file_id
-                message_file_name = update.message.document.file_name
-                if os.path.exists(service_pass):       # Получаем сохраненный пароль из файла
-                     with open(service_pass, 'r') as f:
-                        s_pass = f.read().strip()
-                if message_file_name == 'template.docx' and update.message.caption == s_pass: # если прикреплен новый шаблон и введён пароль
-                    bot.delete_message(usr_id, message_id)   #удаляем сообщение с
-                    downloaded_file = bot.download_file(bot.get_file(message_file_id).file_path)
-                    with open(template, 'wb') as new_file:            # Сохраняем файл на сервере, заменяя старый
-                        new_file.write(downloaded_file)
-                    bot.send_message(usr_id, "Шаблон успешно обновлён")
-                else:
-                    bot.send_message(usr_id, "Что бы заменить шаблон на сервере нужно прикрепить файл с названием template.docx и в сообщении ввести сервисный пароль")
-
-
-            else:
-
-                if message_text == "Привет" or message_text == "привет":
-                    bot.send_message(usr_id, 'from oldest SHTEBLETS')
-
-                elif message_text.startswith('REQ'):        # полуение АВР для заявки
-                    get_AVR(message_text, usr_id)
-
-                elif (message_text == "/start" or message_text == "/help"):
-                    send_text = ('Проверяет новые заявки каждые 10 минут.\n\n' +
-                                'Подписаться или отписаться от рассылки - нажать на кнопки ниже:')
-                    send_keyboard(usr_id, send_text)
-
-                elif message_text == "Подписаться":
-                    bot.send_message(usr_id, "Введи пароль:")
-
-                elif message_text == "Отписаться":
-                    try:
-                        rm_id(usr_id)
-                        bot.send_message(id, "Ты отписался от новых заявок по саранску")
-                        logging.info(id + ' отписался самостоятельно')
-                    except:
-                        bot.send_message(id, "Странно, отписаться не получилось, скажи Сане")
-                        logging.error(id + ' не смог отписаться. Что то пошло не так.')
-                        
-                elif message_text == "Обновить принудительно":
-                    scheduled_messages('exc')
-                    bot.send_message(usr_id, "Принудительно обновлено...")
-
-                elif "/log" in message_text:
-                    handle_dw_logs(message_text, usr_id, message_id)
-
-                elif "/dw_data" in message_text:
-                    handle_dw_data(message_text, usr_id, message_id)
-
-                elif message_text == "/service":
-                    bot.send_message(usr_id, '/new_bearer - заменить Bearer токен S1\n' +
-                                            '/new_url - заменить ссылку скачивания .xlsx новых заявок (указывать без bearer)\n'
-                                            '/new_service_pass - замена сервисного пароля\n'
-                                            '/new_follow_pass - замена пароля на подписку\n'
-                                            '/dw_template - скачать текущий шаблон АВР\n'
-                                            '/log - скачать логи\n'
-                                            '/dw_data - скачать все данные текущего состояния бота\n'
-                                            'Для обновления шаблона на сервере - прикрепи к сообщению с сервисным паролем документ "template.docx" (скачай, измени, загрузи)')
-
-                elif "/new_bearer" in message_text:           # ==сервисная команда: замены Bearer токена
-                    handle_new_mk_bearer(message_text, usr_id, message_id)
-
-                elif "/new_url" in message_text:           # ==сервисная команда: замены URL
-                    handle_new_url(message_text, usr_id, message_id)
-
-                elif "/dw_template" in message_text:           # ==сервисная команда: скачать текущий шаблон
-                    with open(template, 'rb') as file:
-                        bot.send_document(usr_id, file)
-
-                elif "/new_service_pass" in message_text:           # ==сервисная команда: замены сервисного пароля
-                    handle_new_service_pass(message_text, usr_id, message_id)
-
-                elif "/new_follow_pass" in message_text:           # ==сервисная команда: замены сервисного пароля
-                    handle_new_follow_pass(message_text, usr_id, message_id)
-                    
-                elif message_text == os.getenv('FOLLOW_PASS'):       # команда 'подписаться'
-                    bot.delete_message(usr_id, message_id) #удаляем пароль из чата
-                    bot.delete_message(usr_id, message_id - 1) 
-                    add_id(usr_id)
-                else:
-                    send_text = ('🤔...')
-                    send_keyboard(usr_id, send_text)
 
 
 def main_logic():
