@@ -13,7 +13,7 @@ from docxtpl import DocxTemplate
 from dotenv import load_dotenv
 import re
 import shutil
- 
+
 
 script_dir = Path(__file__).parent  # Определяем путь к текущему скрипту
 data_folder = script_dir / 'data'
@@ -25,6 +25,7 @@ arch_xl_table = script_dir / 'data/req_archive.xlsx'   #архив заявок.
 actual_table = script_dir / 'data/actual_table.xlsx'           # актуальная табличка ексель--
 service_pass = script_dir / 'data/service_pass.txt'
 template = script_dir / 'data/template.docx'  # шаблон АВР
+instruction = script_dir / 'data/instruction.JPG'  # картинка инструкции
 env_file = script_dir / 'data/.env'    # файл секретиков )))
 
 load_dotenv(env_file)
@@ -32,17 +33,57 @@ load_dotenv(env_file)
 logging.basicConfig(level=logging.INFO, filename=log_file, format='%(asctime)s - %(levelname)s - %(message)s')
 
 last_update_id = os.getenv('LAST_UPDATE_ID')
-url = os.getenv('DW_TABLE_URL')
+url_condition = os.getenv('DW_URL_CONDITION')
 tgtoken = os.getenv('TG_TOKEN')    # читаем token tg
 bot = telebot.TeleBot(tgtoken)
 
-# url = open(url_file, 'r').read()    # читаем url для скачмивания табличики
-
-# access_token = open(bearer_file, 'r').read()    # читаем Bearer токен из файла
 access_token = os.getenv('MK_BEARER')    # читаем Bearer токен из файла
 headers = {
     'Authorization': f'Bearer {access_token}'  # Используем Bearer-токен в хеадерсе запроса
 }
+
+user_id = '170800459101114407'
+url_export_excel = f'https://sd.servionica.ru/v1/exports?userId={user_id}'
+url_delete_excel = 'https://sd.servionica.ru/v1/exports/delete'
+url_download_excel = 'https://sd.servionica.ru/v1/exports/download-url'
+
+payload_export_excel = {
+	"export": {
+		"condition": f"{url_condition}",
+		"type": "excel",
+		"tableName": "itsm_task",
+		"columns": [
+			"number",
+			"short_description",
+			"multicard_request_type",
+			"state",
+			"sys_created_at",
+			"deadline",
+			"multicard_closing_date",
+			"multicard_terminal_address",
+			"multicard_comment_ing",
+			"multicard_pos",
+			"multicard_pin_pad",
+			"multicard_id_terminal",
+			"multicard_return_number_pos",
+			"multicard_return_number_pin",
+			"multicard_terminal_vendor_pos",
+			"multicard_name_client",
+			"description",
+			"multicard_additional_information",
+			"multicard_engineer.c_fio",
+			"ab_terminal_actual_address",
+			"ab_spot_address",
+			"resolved_at",
+			"assigned_user.c_fio",
+			"ab_terminal_ucstid",
+			"closure_notes"
+		],
+	},
+	"confirmExportLimitExceeded": "0",
+	"userId": f"{user_id}"
+}
+
 
 
 def scheduled_messages(param=None):       # >-скрипт проверки новых заявок каждые х минут-<
@@ -99,9 +140,6 @@ def new_req(msg, req_ID):    #отправка сообщения (msg), при�
     except Exception as e:
         logging.error(f"функция отправки сообщения выдала ошибку: {e}")
 
-def srv_error(response):   #оброаботка при ошибках сервера
-    logging.error(f"Ошибка сервера: {response.status_code} - {response.text}")
-
 
 def plus_three_hour(in_datetime_str):    # получает дату и время в строке  , прибавляя три часа - возвращает дату и время в строке
     try:       
@@ -114,12 +152,55 @@ def plus_three_hour(in_datetime_str):    # получает дату и врем
 
 
 def dw_actual_table():   #функция скачивания актуальной таблички
-    response = requests.get(url, headers=headers)   # скачивание актуальной таблички
-    if response.status_code == 200:    # Проверяем статус ответа
-        with open(actual_table, 'wb') as f:    # Открываем файл для записи в бинарном режиме
-            f.write(response.content)           # перезаписываем 
-    else:
-        srv_error(response)
+    requests.post(url_export_excel, headers=headers, json=payload_export_excel)   #заказываем excel 
+    time.sleep(2) 
+    response_list = requests.get(url_export_excel, headers=headers)   #получаем список загрузок 
+    data = response_list.content.decode('utf-8') # Декодируем данные
+    json_data = json.loads(data) 
+    last_sys_id = json_data['data']['exports'][0]['sysId'] #парсим id последнего файла
+    
+    payload_dw_del = { 						#составляем пайлоад с этим последним сис-ид
+        "sysIds":[f"{last_sys_id}"],
+        "userId":"170800459101114407"
+        }
+
+    start_time = time.time()		                       	# скачивание по готовности данных
+    while True:
+        time.sleep(3)     
+        try:
+            response_list = requests.get(url_export_excel, headers=headers) 	#запрос списка загрузок  
+              
+            if response_list.status_code == 200:
+                data = response_list.content.decode('utf-8') # Декодируем данные
+                json_data = json.loads(data) 
+                status = json_data['data']['exports'][0]['state']  #парсим его статус
+    
+                if status == "completed":				#если данные готовы
+                    response_dw_url = requests.post(url_download_excel, headers=headers, json=payload_dw_del)   #получаем ссылку на скачивание
+                    data = response_dw_url.content.decode('utf-8') # Декодируем данные
+                    json_data = json.loads(data) 
+                    parse_dw_url = json_data['data']['downloadUrls'][0] #парсим ссылку
+        
+                    response_excel = requests.get(parse_dw_url)   # скачивание актуальной таблички 
+                    if response_excel.status_code == 200:    		# Проверяем статус ответа
+                        with open(actual_table, 'wb') as f:    # Открываем файл для записи в бинарном режиме
+                            f.write(response_excel.content)           # перезаписываем 
+                    else:
+                        logging.error(f"Ошибка скачивания excel таблички: {response_excel.status_code}")
+                    break
+            else:
+                logging.error(f"Ошибка сервера: {response_list.status_code}")
+
+        except requests.RequestException as e:
+            logging.error(f"Ошибка запроса: {e}")
+            break
+
+        # Проверяем, не истекло ли время ожидания
+        if time.time() - start_time > 15:
+            logging.error("Данные были не готовы > 15 секунд.")
+            break
+
+    response = requests.post(url_delete_excel, headers=headers, json=payload_dw_del)  #удаляем табличку с сервера
 
 
 def search_new_req():   #функция поиска новых заявок
@@ -144,9 +225,9 @@ def gat_req_data(req):   #функция вытаскивания данных �
                 json_data = json.loads(data) # И вуаля! У нас есть JSON ещё.
                 return (json_data, req_ID)
             else:
-                srv_error(response)
+                logging.error(f"Ошибка сервера: {response.status_code} - {response.text}")
         else:
-            srv_error(response)
+            logging.error(f"Ошибка сервера: {response.status_code} - {response.text}")
     except Exception as e:
         logging.error(f"функция вытаскивания данных по номеру заявки выдала ошибку: {e}")
 
@@ -432,25 +513,25 @@ def handle_dw_data(message, chat_id, msg_id): #---скачивание данн�
 
 
 def handle_new_url(message, chat_id, msg_id): #---обновление ЮРЛ--------------------------------------+
-    global url
+    global url_condition
     try:
-        logging.info('попытка смены url: "' + url + '" на новый...')
+        logging.info('попытка смены url condition: "' + url_condition + '" на новый...')
 
         command_parts = message.split(maxsplit=2)         # Разделяем текст команды на части
 
         if len(command_parts) < 3:         # Проверяем, что есть и пароль, и новый url
-            bot.send_message(chat_id, "Ошибка: формат команды /new_url <pass> <url>")
+            bot.send_message(chat_id, "Ошибка: формат команды /new_url <pass> <url_condition>")
             return
         
         input_password = command_parts[1]
-        new_url = command_parts[2]
+        new_url_condition = command_parts[2]
 
         if input_password == os.getenv('SERVICE_PASS'):        # Проверяем правильность пароля
             bot.delete_message(chat_id, msg_id) #удаляем пароль из чата
-            update_env_variable('DW_TABLE_URL', new_url)
-            url = new_url
+            update_env_variable('DW_URL_CONDITION', new_url_condition)
+            url_condition = new_url_condition
             bot.send_message(chat_id, "URL успешно обновлён!")
-            logging.info('новый URL установлен: ' + new_url)
+            logging.info('новый URL установлен: ' + url_condition)
         elif input_password == os.getenv('FOLLOW_PASS'):  #если это пароль на подписку
             bot.send_message(chat_id, "Это пароль на подписку. Так не прокатит.")
             logging.info('URL не обновлён пользователем ' + str(chat_id) + '(ввёл пароль на подписку)')
@@ -566,7 +647,7 @@ def check_new_messages():
 
                     elif message_text == "/service":
                         bot.send_message(usr_id, '/new_bearer - заменить Bearer токен S1\n' +
-                                                '/new_url - заменить ссылку скачивания .xlsx новых заявок (указывать без bearer)\n'
+                                                '/new_url - заменить ссылку скачивания .xlsx новых заявок (но сначала смотри инструкцию: /new_url_instruction)\n'
                                                 '/new_service_pass - замена сервисного пароля\n'
                                                 '/new_follow_pass - замена пароля на подписку\n'
                                                 '/dw_template - скачать текущий шаблон АВР\n'
@@ -577,10 +658,14 @@ def check_new_messages():
                     elif "/new_bearer" in message_text:           # ==сервисная команда: замены Bearer токена
                         handle_new_mk_bearer(message_text, usr_id, message_id)
 
+                    elif message_text ==  "/new_url_instruction":   # ==сервисная команда: показать инструкцию
+                        with open(instruction, 'rb') as file:
+                            bot.send_document(usr_id, file)
+                            
                     elif "/new_url" in message_text:           # ==сервисная команда: замены URL
                         handle_new_url(message_text, usr_id, message_id)
 
-                    elif "/dw_template" in message_text:           # ==сервисная команда: скачать текущий шаблон
+                    elif message_text ==  "/dw_template":           # ==сервисная команда: скачать текущий шаблон
                         with open(template, 'rb') as file:
                             bot.send_document(usr_id, file)
 
@@ -602,7 +687,7 @@ def check_new_messages():
 
 
 def main_logic():
-    schedule.every(10).minutes.do(scheduled_messages) # Планируем задачу на каждые x минут
+    schedule.every(15).minutes.do(scheduled_messages) # Планируем задачу на каждые x минут
     logging.info('скрипт запущен')
     load_last_update_id()  # Загружаем последний update_id из файла при запуске
     # scheduled_messages() # выполнение при запуске
@@ -613,13 +698,3 @@ def main_logic():
 
 if __name__ == '__main__':
     main_logic()
-
-
-
-
-
-
-
-
-
-

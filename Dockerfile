@@ -20,5 +20,5 @@ WORKDIR /mk_req_check
 RUN pip3 install --no-cache-dir --break-system-packages -r requirements.txt
 
 # Указываем точку входа (entrypoint) для запуска
-#CMD ["python3", "main_script.py"]
+CMD ["python3", "main_script.py"]
 

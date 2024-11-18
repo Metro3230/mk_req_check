@@ -7,6 +7,7 @@ this is debian bookworm for experiments for work tg bot )
     4. docker build . -t mk_req_check:vXX
     5. После сборки запускать коммандой docker run --name mk_req_check --restart unless-stopped -d mk_req_check:vXX
 
+    Если не нужно останавливаться при тестировании:  ```docker run --name mk_req_check --restart unless-stopped -d mk_req_check:vXX tail -f /dev/null```
 
      
 
