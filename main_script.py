@@ -251,7 +251,7 @@ def parse(json_data):   #функция парсинга и составлени
             servis_type = json_data['data']['sections'][1]['elements'][22]['value']['display_value']   #  склад или сервисная
             if servis_type == 'Сервисные заявки':         # ++++++++++-----ВТБ СЕРВИС-------++++++++++++++
                 req_type = json_data['data']['sections'][5]['elements'][9]['value']  
-                adress = json_data['data']['sections'][5]['elements'][35]['value']
+                adress = json_data['data']['sections'][5]['elements'][36]['value']
                 deadline = json_data['data']['sections'][1]['elements'][37]['value']
                 deadline = plus_three_hour(deadline)
                 req_suts = json_data['data']['sections'][1]['elements'][2]['value']
@@ -289,8 +289,8 @@ def parse(json_data):   #функция парсинга и составлени
     except Exception as e:
         new_req_message = ('Новая заявка: ' + req + '\n'
                 'по проекту ' + proj)
-        return new_req_message
         logging.error(f"функция парсинга и составления сообщения выдала ошибку: {e}")
+        return new_req_message
     
 def get_AVR(req, chat_id):         # заполнение шаблона (принимает json данные - отдаёт ссылку на созданый заполненый .docx)
     try:
