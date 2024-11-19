@@ -272,7 +272,7 @@ def parse(json_data):   #функция парсинга и составлени
                 new_req_message = ('Новая складская заявка: ' + req + ' по ' + proj + '\n'
                         'Предельный срок: ' + deadline + '\n')
                 return new_req_message
-            else:                                           # ++++++++++-----ВТБ ХЗ-------++++++++++++++
+            else:                                           # ++++++++++-----ВТБ ХЗ-------++++++++++++++                
                 info = json_data['data']['sections'][1]['elements'][41]['value']   
                 info = 'нет информации' if info == None else info                   # проверки на ноль
                 new_req_message = ('Новая заявка: ' + req + '\n'
@@ -287,6 +287,9 @@ def parse(json_data):   #функция парсинга и составлени
                     'Информация: ' + info)
             return new_req_message
     except Exception as e:
+        new_req_message = ('Новая заявка: ' + req + '\n'
+                'по проекту ' + proj)
+        return new_req_message
         logging.error(f"функция парсинга и составления сообщения выдала ошибку: {e}")
     
 def get_AVR(req, chat_id):         # заполнение шаблона (принимает json данные - отдаёт ссылку на созданый заполненый .docx)
@@ -326,7 +329,7 @@ def get_AVR(req, chat_id):         # заполнение шаблона (при
             bot.delete_message(chat_id, waiting_msg.message_id)
             bot.send_message(chat_id, "Ошибка: проект заявки не АБ")
     except Exception as e:
-        logging.error(f"функция парсинга и составления сообщения выдала ошибку: {e}")
+        logging.error(f"функция заполнения шаблона выдала ошибку: {e}")
 
 def escape_markdown_v2(text):   #подготовка текста для защиты от испорченного Markdown (добавляем \)
     special_chars = r"_*[]()~`>#+-=|{}.!"
@@ -629,13 +632,14 @@ def check_new_messages():
                     elif message_text == "Отписаться":
                         try:
                             rm_id(usr_id)
-                            bot.send_message(id, "Ты отписался от новых заявок по саранску")
-                            logging.info(id + ' отписался самостоятельно')
+                            bot.send_message(usr_id, "Ты отписался от новых заявок по саранску")
+                            logging.info(usr_id + ' отписался самостоятельно')
                         except:
-                            bot.send_message(id, "Странно, отписаться не получилось, скажи Сане")
-                            logging.error(id + ' не смог отписаться. Что то пошло не так.')
+                            bot.send_message(usr_id, "Странно, отписаться не получилось, скажи Сане")
+                            logging.error(usr_id + ' не смог отписаться. Что то пошло не так.')
                             
                     elif message_text == "Обновить принудительно":
+                        bot.send_message(usr_id, "Ща, сек...")
                         scheduled_messages('exc')
                         bot.send_message(usr_id, "Принудительно обновлено...")
 
