@@ -89,6 +89,7 @@ payload_export_excel = {
 def scheduled_messages(param=None):       # >-скрипт проверки новых заявок каждые х минут-<
     current_time = datetime.now().time()
     if (current_time >= datetime.strptime("07:00", "%H:%M").time() and current_time <= datetime.strptime("22:00", "%H:%M").time()) or param == 'exc':   #если день или передан параметр exc
+        check_SLA()
         dw_actual_table()
         new_reqs_df = search_new_req()
         for req in new_reqs_df['Номер']:    # --цикл, пробегающийся по всем значениям столбца "номер" --
@@ -98,9 +99,8 @@ def scheduled_messages(param=None):       # >-скрипт проверки но
                 if msg != None:
                     new_req(msg, req_ID)
             except:
-                new_req('есть какя-то новая заявка, но не удалось загрузить инфу..', 000)
+                new_req(req)
         update_archive()
-        check_SLA()
 
 
 def check_SLA():       # >-скрипт проверки истечения времени-<
@@ -123,20 +123,31 @@ def check_SLA():       # >-скрипт проверки истечения вр
                         rm_id(line.strip())
 
 
-def new_req(msg, req_ID):    #отправка сообщения (msg), прикрипление ссылки с (req_ID) и документа по ссылке (attachment)
-    try:       
-        keyboard = types.InlineKeyboardMarkup()
-        url_button = types.InlineKeyboardButton(text='открыть', url='https://sd.servionica.ru/record/itsm_request/' + req_ID)
-        keyboard.add(url_button)
-        with open(ids_file, 'r') as f:    # Читаем содержимое файла
-            lines = f.readlines()
-            for line in lines:
-                try:    
-                    if line != '':
-                        bot.send_message(line, msg, reply_markup=keyboard)                  # Отправка сообщение с ссылкой
-                except:
-                    logging.error(f"Ошибка отправки сообщения в чат - {line.strip()}, удаляем пользовтеля.")
-                    rm_id(line.strip())
+def new_req(msg, req_ID = None):    #отправка сообщения (msg), прикрипление ссылки с (req_ID) и документа по ссылке (attachment) (если передано только msg, значит не удалоось распарсить подробности, значит в msg номер заявки, просто пишем, что новая заявка....е6ать криво-косо-костыли)))
+    try:
+        if (req_ID):
+            keyboard = types.InlineKeyboardMarkup()
+            url_button = types.InlineKeyboardButton(text='открыть', url='https://sd.servionica.ru/record/itsm_request/' + req_ID)
+            keyboard.add(url_button)
+            with open(ids_file, 'r') as f:    # рассылка если всё ок
+                lines = f.readlines()
+                for line in lines:
+                    try:    
+                        if line != '':
+                            bot.send_message(line, msg, reply_markup=keyboard)                  # Отправка сообщение с ссылкой
+                    except:
+                        logging.error(f"Ошибка отправки сообщения в чат - {line.strip()}, удаляем пользовтеля.")
+                        rm_id(line.strip())
+        else:
+            with open(ids_file, 'r') as f:    # рассылка без подробностей
+                lines = f.readlines()
+                for line in lines:
+                    try:    
+                        if line != '':
+                            bot.send_message(line, f'Внимание, новая заявка: {msg} ! \nПодробности неизвестны.')                  # Отправка сообщение с ссылкой
+                    except:
+                        logging.error(f"Ошибка отправки сообщения в чат - {line.strip()}, удаляем пользовтеля.")
+                        rm_id(line.strip())
     except Exception as e:
         logging.error(f"функция отправки сообщения выдала ошибку: {e}")
 
@@ -152,55 +163,58 @@ def plus_three_hour(in_datetime_str):    # получает дату и врем
 
 
 def dw_actual_table():   #функция скачивания актуальной таблички
-    requests.post(url_export_excel, headers=headers, json=payload_export_excel)   #заказываем excel 
-    time.sleep(2) 
-    response_list = requests.get(url_export_excel, headers=headers)   #получаем список загрузок 
-    data = response_list.content.decode('utf-8') # Декодируем данные
-    json_data = json.loads(data) 
-    last_sys_id = json_data['data']['exports'][0]['sysId'] #парсим id последнего файла
-    
-    payload_dw_del = { 						#составляем пайлоад с этим последним сис-ид
-        "sysIds":[f"{last_sys_id}"],
-        "userId":"170800459101114407"
-        }
-
-    start_time = time.time()		                       	# скачивание по готовности данных
-    while True:
-        time.sleep(3)     
-        try:
-            response_list = requests.get(url_export_excel, headers=headers) 	#запрос списка загрузок  
-              
-            if response_list.status_code == 200:
-                data = response_list.content.decode('utf-8') # Декодируем данные
-                json_data = json.loads(data) 
-                status = json_data['data']['exports'][0]['state']  #парсим его статус
-    
-                if status == "completed":				#если данные готовы
-                    response_dw_url = requests.post(url_download_excel, headers=headers, json=payload_dw_del)   #получаем ссылку на скачивание
-                    data = response_dw_url.content.decode('utf-8') # Декодируем данные
-                    json_data = json.loads(data) 
-                    parse_dw_url = json_data['data']['downloadUrls'][0] #парсим ссылку
+    try:
+        requests.post(url_export_excel, headers=headers, json=payload_export_excel)   #заказываем excel 
+        time.sleep(2) 
+        response_list = requests.get(url_export_excel, headers=headers)   #получаем список загрузок 
+        data = response_list.content.decode('utf-8') # Декодируем данные
+        json_data = json.loads(data) 
+        last_sys_id = json_data['data']['exports'][0]['sysId'] #парсим id последнего файла
         
-                    response_excel = requests.get(parse_dw_url)   # скачивание актуальной таблички 
-                    if response_excel.status_code == 200:    		# Проверяем статус ответа
-                        with open(actual_table, 'wb') as f:    # Открываем файл для записи в бинарном режиме
-                            f.write(response_excel.content)           # перезаписываем 
-                    else:
-                        logging.error(f"Ошибка скачивания excel таблички: {response_excel.status_code}")
-                    break
-            else:
-                logging.error(f"Ошибка сервера: {response_list.status_code}")
+        payload_dw_del = { 						#составляем пайлоад с этим последним сис-ид
+            "sysIds":[f"{last_sys_id}"],
+            "userId":"170800459101114407"
+            }
 
-        except requests.RequestException as e:
-            logging.error(f"Ошибка запроса: {e}")
-            break
+        start_time = time.time()		                       	# скачивание по готовности данных
+        while True:
+            time.sleep(3)     
+            try:
+                response_list = requests.get(url_export_excel, headers=headers) 	#запрос списка загрузок  
+                
+                if response_list.status_code == 200:
+                    data = response_list.content.decode('utf-8') # Декодируем данные
+                    json_data = json.loads(data) 
+                    status = json_data['data']['exports'][0]['state']  #парсим его статус
+        
+                    if status == "completed":				#если данные готовы
+                        response_dw_url = requests.post(url_download_excel, headers=headers, json=payload_dw_del)   #получаем ссылку на скачивание
+                        data = response_dw_url.content.decode('utf-8') # Декодируем данные
+                        json_data = json.loads(data) 
+                        parse_dw_url = json_data['data']['downloadUrls'][0] #парсим ссылку
+            
+                        response_excel = requests.get(parse_dw_url)   # скачивание актуальной таблички 
+                        if response_excel.status_code == 200:    		# Проверяем статус ответа
+                            with open(actual_table, 'wb') as f:    # Открываем файл для записи в бинарном режиме
+                                f.write(response_excel.content)           # перезаписываем 
+                        else:
+                            logging.error(f"Ошибка скачивания excel таблички: {response_excel.status_code}")
+                        break
+                else:
+                    logging.error(f"Ошибка сервера: {response_list.status_code}")
 
-        # Проверяем, не истекло ли время ожидания
-        if time.time() - start_time > 15:
-            logging.error("Данные были не готовы > 15 секунд.")
-            break
+            except requests.RequestException as e:
+                logging.error(f"Ошибка запроса: {e}")
+                break
 
-    response = requests.post(url_delete_excel, headers=headers, json=payload_dw_del)  #удаляем табличку с сервера
+            # Проверяем, не истекло ли время ожидания
+            if time.time() - start_time > 25:
+                logging.error("Данные были не готовы > 25 секунд.")
+                break
+
+        response = requests.post(url_delete_excel, headers=headers, json=payload_dw_del)  #удаляем табличку с сервера
+    except Exception as e:
+        logging.error(f"Ошибка скачивания актуальной таблички: {e}.")
 
 
 def search_new_req():   #функция поиска новых заявок
@@ -688,6 +702,7 @@ def check_new_messages():
                         send_keyboard(usr_id, send_text)                    
     except:
         logging.error(f"Ошибка запроса новых сообщений.")
+        time.sleep(60)
 
 
 def main_logic():
