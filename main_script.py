@@ -614,10 +614,10 @@ def check_new_messages():
                 if update.message.document:                             # обновление  шаблона
                     message_file_id = update.message.document.file_id
                     message_file_name = update.message.document.file_name
-                    if os.path.exists(service_pass):       # Получаем сохраненный пароль из файла
-                        with open(service_pass, 'r') as f:
-                            s_pass = f.read().strip()
-                    if message_file_name == 'template.docx' and update.message.caption == s_pass: # если прикреплен новый шаблон и введён пароль
+                    # if os.path.exists(service_pass):       # Получаем сохраненный пароль из файла
+                    #     with open(service_pass, 'r') as f:
+                    #         s_pass = f.read().strip()
+                    if message_file_name == 'template.docx' and update.message.caption == os.getenv('SERVICE_PASS'): # если прикреплен новый шаблон и введён пароль
                         bot.delete_message(usr_id, message_id)   #удаляем сообщение с
                         downloaded_file = bot.download_file(bot.get_file(message_file_id).file_path)
                         with open(template, 'wb') as new_file:            # Сохраняем файл на сервере, заменяя старый
