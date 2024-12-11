@@ -3,16 +3,16 @@ import requests
 import json
 
 
-access_token = open('data/Bearer.txt', 'r').read()    # читаем Bearer токен из файла
+# access_token = open('data/Bearer.txt', 'r').read()    # читаем Bearer токен из файла
 headers = {
-    'Authorization': f'Bearer {access_token}'  # Используем Bearer-токен в хеадерсе запроса
+    'Authorization': f'Bearer PASTE_TOKEN'  # Используем Bearer-токен в хеадерсе запроса
 }
 
 
 
 
 # --------------------------СКАЧАТЬ В JSON ФАЙЛ ПО ССЫВЛКЕ:-----------------------
-req = 'REQ0647044'
+req = 'REQ0839946'
 
 # Делаем запрос к URL
 response = requests.get('https://sd.servionica.ru/v1/search?query=' + req, headers=headers)
