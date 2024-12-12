@@ -288,8 +288,8 @@ def parse(json_data):   #функция парсинга и составлени
         info = parce_json_by_column("155931135900001085", json_data)  
         deadline = parce_json_by_column("163765849995310104", json_data) 
         info = 'хз' if info == None else info                   # проверки на ноль
-        # deadline = 'хз' if deadline == None else plus_three_hour(deadline)  #если не 0 то +3 часа
-        deadline = 'хз' if deadline == None else deadline  # только для отладки (!)
+        deadline = 'хз' if deadline == None else plus_three_hour(deadline)  #если не 0 то +3 часа
+        # deadline = 'хз' if deadline == None else deadline  # только для отладки (!)
 
         if proj == 'АО \"АЛЬФА-БАНК\"':                  # ++++++++++-----АБ-------++++++++++++++
             adress = parce_json_by_column("171267113290922982", json_data)            
@@ -308,6 +308,7 @@ def parse(json_data):   #функция парсинга и составлени
                 req_suts = parce_json_by_column("163770345094995261", json_data) 
                 adress = 'хз' if adress == None else adress              # проверки на ноль
                 req_suts = 'хз' if req_suts == None else req_suts
+                req_type = 'хз' if req_type == None else req_type
                 if req_type != 'expertise':                                      # кроме экспертиз
                     new_req_message = ('Новая заявка: ' + req + ' (' + req_suts + ') по ' + proj + '\n'
                             + adress + '\n'
@@ -316,8 +317,6 @@ def parse(json_data):   #функция парсинга и составлени
                     return new_req_message
 
             elif servis_type == 'Складские заявки':         # ++++++++++-----ВТБ СКЛАД-------++++++++++++++
-                req_suts = parce_json_by_column("163770345094995261", json_data) 
-                req_suts = 'хз' if req_suts == None else req_suts
                 new_req_message = ('Новая складская заявка: ' + req + ' по ' + proj + '\n'
                         'Предельный срок: ' + deadline + '\n')
                 return new_req_message
