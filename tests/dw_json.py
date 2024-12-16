@@ -12,7 +12,7 @@ headers = {
 
 
 # --------------------------СКАЧАТЬ В JSON ФАЙЛ ПО ССЫВЛКЕ:-----------------------
-req = 'REQ0839946'
+req = 'REQ0845249'
 
 # Делаем запрос к URL
 response = requests.get('https://sd.servionica.ru/v1/search?query=' + req, headers=headers)

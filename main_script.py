@@ -614,6 +614,7 @@ def handle_new_url(message, chat_id, msg_id): #---обновление ЮРЛ---
             bot.delete_message(chat_id, msg_id) #удаляем пароль из чата
             update_env_variable('DW_URL_CONDITION', new_url_condition)
             url_condition = new_url_condition
+            payload_export_excel["export"]["condition"] = new_url_condition
             bot.send_message(chat_id, "URL успешно обновлён!")
             logging.info('новый URL установлен: ' + url_condition)
         elif input_password == os.getenv('FOLLOW_PASS'):  #если это пароль на подписку
