@@ -336,12 +336,12 @@ def parse(json_data):   #функция парсинга и составлени
     except Exception as e:
         new_req_message = ('Новая заявка: ' + req + '\n'
                 'по проекту ' + proj)
-        # logging.error(f"функция парсинга и составления сообщения выдала ошибку: {e}")
-        print(e)
+        logging.error(f"функция парсинга и составления сообщения выдала ошибку: {e}")
+        # print(e)
         return new_req_message
         
         
-def parce_json_by_column(column_id_to_find, json_data):
+def parce_json_by_column(column_id_to_find, json_data): #функция парсинга данных по ID строки
     try:
         proj = None  # Инициализируем переменную proj значением None      
         for section in json_data['data']['sections']:
@@ -361,7 +361,7 @@ def parce_json_by_column(column_id_to_find, json_data):
         
         return proj
     except Exception as e:
-        logging.error(f"функция парсинга и составления сообщения выдала ошибку: {e}")
+        logging.error(f"функция парсинга данных по ID строки выдала ошибку: {e}")
     
     
 def get_AVR(req, chat_id):         # заполнение шаблона (принимает json данные - отдаёт ссылку на созданый заполненый .docx)
